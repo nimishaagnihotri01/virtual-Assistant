@@ -1,70 +1,83 @@
-import genToken from "../config/token.js"
-import User from "../models/user.model.js"
-import bcrypt from "bcryptjs"
-export const signup=async(req,res)=>{
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import User from "../models/user.model.js";
+
+// Signup Controller
+export const signup = async (req, res) => {
     try {
-        const{name,email,password}=req.body
+        const { username, email, password } = req.body;
 
-        const existEmail=await User.findOne({email})
-        if(existEmail){
-            return res.status(400).json({message:"email already exists!"})
+        if (!username || !email || !password) {
+            return res.status(400).json({ message: "All fields are required" });
         }
-        if(password.length<6){
-            return res.status(400).json({message:"password must be atleast 6 characters!"})
+
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ message: "Email already registered" });
         }
-        const hashedPassword=await bcrypt.hash(password,10)
 
-        const user=await User.create({
-            name,password:hashedPassword,email
-        })
-        const token=await genToken(user._id)
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-        res.cookie("token",token,{
-            httpOnly:true,
-            maxAge:7*24*60*60*1000,
-            sameSite:"strict",
-            secure:false
-        })
+        const newUser = new User({
+            username,
+            email,
+            password: hashedPassword,
+        });
 
-        return res.status(201).json(user)
+        await newUser.save();
+
+        return res.status(201).json({ message: "User registered successfully" });
     } catch (error) {
-        return res.status(500).json({message:'sign up error ${error}'})
+        console.error(error);
+        return res.status(500).json({ message: "Signup error" });
     }
-}
+};
 
-export const Login=async(req,res)=>{
+// Login Controller
+export const Login = async (req, res) => {
     try {
-        const{email,password}=req.body
+        const { email, password } = req.body;
 
-        const user=await User.findOne({email})
-        if(!user){
-            return res.status(400).json({message:"email does not exists!"})
-        }
-        const isMatch=await bcrypt.compare(password,user.password)
-        if(!isMatch){
-            return res.status(400).json({message:"incorrect password!"})
+        if (!email || !password) {
+            return res.status(400).json({ message: "All fields are required" });
         }
 
-        const token=await genToken(user._id)
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(400).json({ message: "Invalid email or password" });
+        }
 
-        res.cookie("token",token,{
-            httpOnly:true,
-            maxAge:7*24*60*60*1000,
-            sameSite:"strict",
-            secure:false
-        })
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Invalid email or password" });
+        }
 
-        return res.status(200).json(user)
+        const token = jwt.sign(
+            { userId: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: "1d" }
+        );
+
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 24 * 60 * 60 * 1000 // 1 day
+        });
+
+        return res.status(200).json({ message: "Login successful" });
     } catch (error) {
-        return res.status(500).json({message:'login error ${error}'})
+        console.error(error);
+        return res.status(500).json({ message: "Login error" });
     }
-}
+};
 
-export const logout=async(req,res)=>{
-    try {
-        res.clearCookie("token")
-        return res.status(200).json({message:"logout successfully!"})
-    } catch (error) {
-        return res.status(500).json({message:'logout error ${error}'})
-    }
-}
+// Logout Controller
+export const logout = (req, res) => {
+    res.clearCookie("token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict"
+    });
+    return res.status(200).json({ message: "Logged out successfully" });
+};
