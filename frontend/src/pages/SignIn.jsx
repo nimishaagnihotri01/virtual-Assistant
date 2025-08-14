@@ -27,7 +27,7 @@ function SignIn() {
       setUserData(result.data)
       setLoading(false)
       // Redirect after success (optional)
-      navigate("/signin");
+      navigate("/");
     } catch (error) {
       console.error("Signup error:", error.response?.data || error.message);
       setUserData(null)
